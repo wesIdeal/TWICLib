@@ -7,7 +7,7 @@ using System.ComponentModel;
 using System.Configuration;
 using System.Diagnostics;
 using System.Globalization;
-using System.Configuration;
+
 
 namespace TWICLib
 {
@@ -26,11 +26,11 @@ namespace TWICLib
     public class EntryRetriever
     {
         private static readonly CultureInfo DateFormatProvider = CultureInfo.InvariantCulture;
-        public List<TWICEntry> Initialize()
+        public List<TWICEntry> Initialize(string twicUri)
         {
             var web = new HtmlAgilityPack.HtmlWeb();
-            var doc = web.Load(ConfigurationManager.AppSettings["TWICArchiveURL"]);
-            var table = doc.DocumentNode.SelectSingleNode($"//table[contains(@class, '{ConfigurationManager.AppSettings["TWICArchiveTableClass"]}')]");
+            var doc = web.Load(twicUri);
+            var table = doc.DocumentNode.SelectSingleNode($"//table[contains(@class, 'results-table')]");
             var rows = table.SelectNodes("//tr").ToList();
             var entries = new List<TWICEntry>();
             rows.Skip(2).Select((node, i) => new { idx = i, node }).ToList().ForEach((node) =>
@@ -51,10 +51,14 @@ namespace TWICLib
             });
             return entries;
         }
-        public EntryRetriever()
+        public EntryRetriever(string twicUri = "")
         {
             Entries = new List<TWICEntry>();
-            Initialize();
+            if (twicUri == "")
+            {
+                twicUri = "http://theweekinchess.com/twic";
+            }
+            Initialize(twicUri);
         }
 
         public List<TWICEntry> Entries { get; internal set; }
