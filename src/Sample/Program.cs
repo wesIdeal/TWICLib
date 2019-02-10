@@ -55,28 +55,32 @@ namespace TWICHelper
             }
             else if (commandLineOpts.DownloadFrom.HasValue)
             {
-                entries = entryRetriever.Entries.Where(x => x.ID >= commandLineOpts.DownloadFrom.Value).ToList();
-                if (commandLineOpts.DownloadTo.HasValue)
-                {
-                    entries = entries.Where(x => x.ID <= commandLineOpts.DownloadTo.Value).ToList();
-                }
+                entryRetriever.GetDownloadListByIdRange(commandLineOpts.DownloadFrom.Value, commandLineOpts.DownloadTo, out entries);
             }
             downloadList = entries.Select(x => x.PGNUri).ToList();
-            Console.WriteLine($"You are about to download {downloadList.Count()} archives. Continue?");
-            var continueProcessing = ConsoleHelper.GetContinue();
-            if (continueProcessing)
+            if (downloadList.Any())
             {
-
-                foreach (var uri in downloadList)
+                Console.WriteLine($"You are about to download {downloadList.Count()} archives. Continue?");
+                var continueProcessing = ConsoleHelper.GetContinue();
+                if (continueProcessing)
                 {
-                    Console.WriteLine($"Downloading {uri}.");
-                    var request = WebRequest.Create(uri) as HttpWebRequest;
-                    GetRequestStreamCallback(request);
+
+                    foreach (var uri in downloadList)
+                    {
+                        Console.WriteLine($"Downloading {uri}.");
+                        var request = WebRequest.Create(uri) as HttpWebRequest;
+                        GetRequestStreamCallback(request);
 
 
+                    }
                 }
             }
-            Console.ReadKey();
+            else { Console.WriteLine("No files to download."); }
+            if (Debugger.IsAttached)
+            {
+                Console.WriteLine("Press any key.");
+                Console.ReadKey();
+            }
         }
 
         private static void GetRequestStreamCallback(HttpWebRequest request)
@@ -114,7 +118,7 @@ namespace TWICHelper
                             received += size;
                             var progressPercent = (float)received / total;
                             var displayPercent = (int)Math.Round(25 * progressPercent);
-                            Console.Write($"\rProgress: [{new string('X', displayPercent).PadRight(25, '_') }] {Math.Round(progressPercent *100, 2)}%   ");
+                            Console.Write($"\rProgress: [{new string('X', displayPercent).PadRight(25, '_') }] {Math.Round(progressPercent * 100, 2)}%   ");
                             size = input.Read(buffer, 0, buffer.Length);
                         }
 

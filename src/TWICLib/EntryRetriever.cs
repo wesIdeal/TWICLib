@@ -61,6 +61,15 @@ namespace TWICLib
             Entries = Initialize(twicUri);
         }
 
+        public void GetDownloadListByIdRange(int idFrom, int? idTo, out List<TWICEntry> entries)
+        {
+            entries = Entries.Where(x => x.ID >= idFrom).ToList();
+            if (idTo.HasValue)
+            {
+                entries = entries.Where(x => x.ID <= idTo).ToList();
+            }
+        }
+
         public List<TWICEntry> Entries { get; internal set; }
 
         public Response GetDownloadListById(int id, out List<TWICEntry> entries)
