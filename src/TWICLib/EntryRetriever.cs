@@ -58,10 +58,29 @@ namespace TWICLib
             {
                 twicUri = "http://theweekinchess.com/twic";
             }
-            Initialize(twicUri);
+            Entries = Initialize(twicUri);
         }
 
         public List<TWICEntry> Entries { get; internal set; }
+
+        public Response GetDownloadListById(int id, out List<TWICEntry> entries)
+        {
+            entries = null;
+            if (!Entries.Any()) { return Response.NO_ITEMS_INITIALIZED; }
+
+            entries = new List<TWICEntry>();
+            if (!Entries.Any(x => x.ID == id))
+            {
+
+                Debug.WriteLine($"It appears as if no TWIC archives exist with the id of {id}.");
+                return Response.NO_NEWER_ITEMS_FOUND;
+            }
+            else
+            {
+                entries = Entries.Where(x => x.ID == id).OrderBy(x => x.ID).ToList();
+            }
+            return Response.OK;
+        }
 
         public Response GetDownloadListById(int? lastDownloaded, out List<TWICEntry> entries)
         {

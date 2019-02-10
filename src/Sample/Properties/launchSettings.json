@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TWICHelper": {
+      "commandName": "Project",
+      "commandLineArgs": "--from 1255 --to 1265 --unzip --output \"c:\\temp\\twic\" --cleanup"
+    }
+  }
+}
