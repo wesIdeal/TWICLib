@@ -1,65 +1,98 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using TWICLib;
 using System.ComponentModel;
-using System.Configuration;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
+using HtmlAgilityPack;
 
 
 namespace TWICLib
 {
     public enum Response
     {
-        [Description("Ok")]
-        OK,
+        [Description("Ok")] Ok,
+
         [Description("No newer items found in search")]
-        NO_NEWER_ITEMS_FOUND,
+        NoNewerItemsFound,
+
         [Description("No items found in list. List must be initialized.")]
-        NO_ITEMS_INITIALIZED,
+        NoItemsInitialized,
+
         [Description("No items found in specified date range.")]
-        NO_DATE_RANGE_ITEMS_FOUND,
+        NoDateRangeItemsFound,
     }
 
     public class EntryRetriever
     {
+        private const string TWICArchiveUrl = "http://theweekinchess.com/twic";
+        private const int IdColumnNumber = 0;
+        private const int FileDateColumnNumber = 1;
+        private const int PgnColumnNumber = 4;
+        private const int CbvColumnNumber = 5;
         private static readonly CultureInfo DateFormatProvider = CultureInfo.InvariantCulture;
-        public List<TWICEntry> Initialize(string twicUri)
-        {
-            var web = new HtmlAgilityPack.HtmlWeb();
-            var doc = web.Load(twicUri);
-            var table = doc.DocumentNode.SelectSingleNode($"//table[contains(@class, 'results-table')]");
-            var rows = table.SelectNodes("//tr").ToList();
-            var entries = new List<TWICEntry>();
-            rows.Skip(2).Select((node, i) => new { idx = i, node }).ToList().ForEach((node) =>
-            {
 
-                var cells = node.node.SelectNodes("td").ToArray();
-                var id = int.Parse(cells[0].InnerText);
-                var date = DateTime.ParseExact(cells[1].InnerText, "dd/MM/yyyy", DateFormatProvider);
-                var pgnUri = new Uri(cells[5].SelectSingleNode("a").Attributes["href"].Value);
-                var cbvUri = new Uri(cells[6].SelectSingleNode("a").Attributes["href"].Value);
-                entries.Add(new TWICEntry()
-                {
-                    ID = id,
-                    PGNUri = pgnUri,
-                    CBVUri = cbvUri,
-                    PublishDate = date
-                });
-            });
-            return entries;
-        }
         public EntryRetriever(string twicUri = "")
         {
             Entries = new List<TWICEntry>();
             if (twicUri == "")
             {
-                twicUri = "http://theweekinchess.com/twic";
+                twicUri = TWICArchiveUrl;
             }
-            Entries = Initialize(twicUri);
+
         }
+
+        public List<TWICEntry> Entries { get; internal set; }
+
+        public void Initialize()
+        {
+            Initialize(TWICArchiveUrl);
+        }
+
+        public List<TWICEntry> Initialize(string twicUri)
+        {
+            var web = new HtmlWeb();
+            var doc = web.Load(twicUri);
+            var table = doc.DocumentNode.SelectSingleNode("//table[contains(@class, 'results-table')]");
+            var tableBody = table.SelectSingleNode("//tbody");
+            var rows = tableBody.SelectNodes("//tr").ToList();
+            var entries = new List<TWICEntry>();
+            rows
+                .Where(r => r.ChildNodes.Any(cn => cn.Name == "td"))
+                .Select((node, i) => new { idx = i, rowContents = node })
+                .ToList()
+                .ForEach((node) =>
+            {
+                Debug.WriteLine($"{node.idx}:\t{node.rowContents}");
+                var cells = node.rowContents.SelectNodes("td").ToArray();
+                var id = GetRowId(cells);
+                if (!id.HasValue) return;
+                var date = DateTime.ParseExact(cells[FileDateColumnNumber].InnerText, "dd/MM/yyyy",
+                    DateFormatProvider);
+                var pgnUri = GetUriFromColumn(cells[PgnColumnNumber]);
+                var cbvUri = GetUriFromColumn(cells[CbvColumnNumber]);
+                entries.Add(new TWICEntry()
+                {
+                    ID = id.Value,
+                    PGNUri = pgnUri,
+                    CBVUri = cbvUri,
+                    PublishDate = date
+                });
+            });
+            return Entries = entries;
+        }
+
+        private static int? GetRowId(HtmlNode[] cells)
+        {
+            var idText = cells[IdColumnNumber].InnerText;
+            if (!int.TryParse(idText, out var id))
+            {
+                return null;
+            }
+            return id;
+        }
+
+        private static Uri GetUriFromColumn(HtmlNode nodeWithUri) => new Uri(nodeWithUri.SelectSingleNode("a").Attributes["href"].Value);
 
         public void GetDownloadListByIdRange(int idFrom, int? idTo, out List<TWICEntry> entries)
         {
@@ -70,55 +103,66 @@ namespace TWICLib
             }
         }
 
-        public List<TWICEntry> Entries { get; internal set; }
-
         public Response GetDownloadListById(int id, out List<TWICEntry> entries)
         {
             entries = null;
-            if (!Entries.Any()) { return Response.NO_ITEMS_INITIALIZED; }
+            if (!Entries.Any())
+            {
+                return Response.NoItemsInitialized;
+            }
 
             entries = new List<TWICEntry>();
-            if (!Entries.Any(x => x.ID == id))
+            if (Entries.All(x => x.ID != id))
             {
-
                 Debug.WriteLine($"It appears as if no TWIC archives exist with the id of {id}.");
-                return Response.NO_NEWER_ITEMS_FOUND;
+                return Response.NoNewerItemsFound;
             }
             else
             {
                 entries = Entries.Where(x => x.ID == id).OrderBy(x => x.ID).ToList();
             }
-            return Response.OK;
+
+            return Response.Ok;
         }
 
         public Response GetDownloadListById(int? lastDownloaded, out List<TWICEntry> entries)
         {
             entries = null;
-            if (!Entries.Any()) { return Response.NO_ITEMS_INITIALIZED; }
+            if (!Entries.Any())
+            {
+                return Response.NoItemsInitialized;
+            }
 
             entries = new List<TWICEntry>();
             if (!Entries.Any(x => x.ID > lastDownloaded))
             {
-
                 Debug.WriteLine($"It appears as if no TWIC archives exist which are newer than {lastDownloaded}.");
-                return Response.NO_NEWER_ITEMS_FOUND;
+                return Response.NoNewerItemsFound;
             }
             else
             {
                 entries = entries.Where(x => x.ID > lastDownloaded).OrderBy(x => x.ID).ToList();
             }
-            return Response.OK;
+
+            return Response.Ok;
         }
 
-        public Response GetDownloadListByDateRange(DateTime startDate, DateTime? endDate, out List<TWICEntry> entriesOut, out string message)
+        public Response GetDownloadListByDateRange(DateTime startDate, DateTime? endDate,
+            out List<TWICEntry> entriesOut, out string message)
         {
-
             message = null;
             entriesOut = new List<TWICEntry>();
-            if (!Entries.Any()) { return Response.NO_ITEMS_INITIALIZED; }
+            if (!Entries.Any())
+            {
+                return Response.NoItemsInitialized;
+            }
 
 
-            if (!endDate.HasValue) { endDate = DateTime.MaxValue; }
+            if (!endDate.HasValue)
+            {
+                endDate = DateTime.MaxValue;
+            }
+
             entriesOut = Entries.Where(x => x.PublishDate > startDate && x.PublishDate <= endDate).ToList();
 
             if (!entriesOut.Any())
@@ -132,11 +176,12 @@ namespace TWICLib
                 {
                     message += $"between {startDate.ToShortDateString()} and {endDate.Value.ToShortDateString()}";
                 }
-                Debug.WriteLine(message);
-                return Response.NO_DATE_RANGE_ITEMS_FOUND;
-            }
-            return Response.OK;
-        }
 
+                Debug.WriteLine(message);
+                return Response.NoDateRangeItemsFound;
+            }
+
+            return Response.Ok;
+        }
     }
 }

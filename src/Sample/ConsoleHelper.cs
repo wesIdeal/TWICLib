@@ -23,6 +23,7 @@ namespace TWICHelper
         public static bool GetContinue()
         {
             var key = Char.ToLower(Console.ReadKey().KeyChar);
+            Console.WriteLine();
             return key == 'y';
         }
     }
